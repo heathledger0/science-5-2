@@ -27,6 +27,7 @@ export function renderChosung(container, { unitId }) {
     <a href="#/play/${unit.id}" class="ghost-btn btn">← 활동 선택으로</a>
     <h1 style="margin-top:14px;">🔤 초성 퀴즈</h1>
     <p class="lead">${escapeHtml(unit.name)} · 문제 <span id="progress"></span></p>
+    <p class="hint" id="lapNotice" style="text-align:center; display:none;"></p>
 
     <div class="card">
       <div class="row">
@@ -77,13 +78,24 @@ export function renderChosung(container, { unitId }) {
     }, 1000);
   }
 
+  function hideLapNotice() {
+    $('#lapNotice').style.display = 'none';
+  }
+
+  function showLapNotice() {
+    const el = $('#lapNotice');
+    el.textContent = '🔄 모든 문제를 한 바퀴 돌았어요! 순서를 다시 섞었어요.';
+    el.style.display = '';
+  }
+
   function renderQuestion() {
     const term = state.order[state.index];
     $('#progress').textContent = `${state.index + 1} / ${state.order.length}`;
     $('#chosungDisplay').textContent = getChosung(term);
-    $('#lengthHint').textContent = `${term.length}글자`;
+    $('#lengthHint').textContent = `${term.replace(/\s/g, '').length}글자`;
     $('#answerReveal').textContent = '';
     state.revealed = false;
+    hideLapNotice();
     startTimerIfEnabled();
   }
 
@@ -104,8 +116,15 @@ export function renderChosung(container, { unitId }) {
 
   $('#revealBtn').addEventListener('click', reveal);
   $('#nextBtn').addEventListener('click', () => {
-    state.index = (state.index + 1) % state.order.length;
+    const wrapped = state.index + 1 >= state.order.length;
+    if (wrapped) {
+      state.order = shuffle(unit.concepts);
+      state.index = 0;
+    } else {
+      state.index += 1;
+    }
     renderQuestion();
+    if (wrapped) showLapNotice();
   });
   $('#restartBtn').addEventListener('click', () => {
     state.order = shuffle(unit.concepts);

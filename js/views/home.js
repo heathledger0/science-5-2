@@ -16,7 +16,7 @@ export function renderHome(container) {
 
     <div class="row" style="margin-bottom: 20px;">
       <a href="#/prepare" class="btn big-btn">＋ 새 단원 준비하기</a>
-      <button id="exampleBtn" class="ghost-btn">🔎 예시로 살펴보기 (5-2-1. 계절의 변화)</button>
+      <button id="exampleBtn" class="ghost-btn">🔎 예시로 살펴보기 (6-2-1. 계절의 변화)</button>
       <button id="importBtn" class="ghost-btn">📥 파일로 불러오기</button>
       <input type="file" id="importInput" accept="application/json" style="display:none" />
     </div>
