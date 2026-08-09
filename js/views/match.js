@@ -1,35 +1,7 @@
 import { getUnit } from '../store.js';
-import { escapeHtml, normalizeForCompare, levenshtein, playBeep } from '../util.js';
-
-function scoreTeam(rawText, concepts) {
-  const tokens = rawText.split(/[\n,、]+/).map((t) => t.trim()).filter(Boolean);
-  const matched = new Set();
-  const ambiguous = [];
-  const used = new Set();
-
-  for (const token of tokens) {
-    const norm = normalizeForCompare(token);
-    if (!norm) continue;
-    const exact = concepts.find((c) => normalizeForCompare(c) === norm && !used.has(c));
-    if (exact) {
-      matched.add(exact);
-      used.add(exact);
-      continue;
-    }
-    let best = null;
-    let bestDist = Infinity;
-    for (const c of concepts) {
-      if (used.has(c)) continue;
-      const d = levenshtein(norm, normalizeForCompare(c));
-      if (d < bestDist) { bestDist = d; best = c; }
-    }
-    const threshold = Math.max(1, Math.floor(normalizeForCompare(best || '').length * 0.4));
-    if (best && bestDist > 0 && bestDist <= Math.min(2, threshold)) {
-      ambiguous.push({ token, concept: best, dist: bestDist, accepted: false });
-    }
-  }
-  return { matched, ambiguous };
-}
+import { escapeHtml, playBeep } from '../util.js';
+import { encodeTeamPayload, buildTeamLink } from '../teamLink.js';
+import { renderQrSvg } from '../qr.js';
 
 export function renderMatch(container, { unitId }) {
   const unit = getUnit(unitId);
@@ -39,197 +11,240 @@ export function renderMatch(container, { unitId }) {
   }
 
   const state = {
-    minutes: 10,
-    seconds: 10 * 60,
-    running: false,
-    intervalId: null,
+    stage: 'setup', // 'setup' | 'search' | 'submit'
     teamCount: 4,
-    teams: [],
+    searchMinutes: 10,
+    submitMinutes: 5,
+    teamNames: ['1모둠', '2모둠', '3모둠', '4모둠'],
+    timerSeconds: 0,
+    timerRunning: false,
+    timerId: null,
   };
 
-  function makeTeams(n) {
-    state.teams = Array.from({ length: n }, (_, i) => ({
-      name: `${i + 1}모둠`,
-      raw: '',
-      matched: new Set(),
-      ambiguous: [],
-      scored: false,
-    }));
-  }
-  makeTeams(state.teamCount);
-
-  container.innerHTML = `
-    <a href="#/play/${unit.id}" class="ghost-btn btn no-print">← 활동 선택으로</a>
-    <h1 style="margin-top:14px;">🕵️ 개념 일치 확인 게임</h1>
-    <p class="lead">${escapeHtml(unit.name)} · 정답 개념 ${unit.concepts.length}개</p>
-
-    <div class="card">
-      <h2>1단계 · 교과서 탐색 시간</h2>
-      <div class="row">
-        <label style="margin:0;">시간(분):</label>
-        <input type="number" id="minutesInput" min="1" max="40" value="${state.minutes}" style="width:80px;" />
-        <button id="startBtn" type="button">▶ 시작</button>
-        <button id="pauseBtn" type="button" class="ghost-btn">⏸ 일시정지</button>
-        <button id="resetBtn" type="button" class="ghost-btn">↺ 초기화</button>
-      </div>
-      <div class="timer-display" id="timerDisplay">10:00</div>
-    </div>
-
-    <div class="card">
-      <h2>2단계 · 모둠별 입력</h2>
-      <div class="row">
-        <label style="margin:0;">모둠 수:</label>
-        <input type="number" id="teamCountInput" min="1" max="10" value="${state.teamCount}" style="width:80px;" />
-        <button id="applyTeamCountBtn" type="button" class="ghost-btn">적용</button>
-        <span class="spacer"></span>
-        <button id="scoreBtn" type="button" class="big-btn">✅ 전체 채점하기</button>
-      </div>
-      <div id="teamInputs" class="grid grid-2" style="margin-top:14px;"></div>
-    </div>
-
-    <div class="card" id="resultCard" style="display:none;">
-      <h2>결과</h2>
-      <div id="resultArea"></div>
-      <details style="margin-top:14px;">
-        <summary style="cursor:pointer; font-weight:700;">전체 정답 개념 공개</summary>
-        <div class="candidate-list" style="margin-top:10px;">
-          ${unit.concepts.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('')}
-        </div>
-      </details>
-    </div>
-  `;
-
-  const $ = (sel) => container.querySelector(sel);
-
-  function renderTimer() {
-    const m = Math.floor(state.seconds / 60);
-    const s = state.seconds % 60;
-    $('#timerDisplay').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    $('#timerDisplay').style.color = state.seconds <= 10 && state.seconds > 0 ? '#dc2626' : '';
+  function renderShell(bodyHtml) {
+    container.innerHTML = `
+      <a href="#/play/${unit.id}" class="ghost-btn btn no-print">← 활동 선택으로</a>
+      <h1 style="margin-top:14px;">🕵️ 개념 일치 확인 게임</h1>
+      <p class="lead">${escapeHtml(unit.name)} · 정답 개념 ${unit.concepts.length}개</p>
+      ${bodyHtml}
+    `;
   }
 
-  $('#minutesInput').addEventListener('change', (e) => {
-    state.minutes = Math.max(1, Math.min(40, Number(e.target.value) || 10));
-    if (!state.running) {
-      state.seconds = state.minutes * 60;
-      renderTimer();
-    }
-  });
+  function stopTimer() {
+    clearInterval(state.timerId);
+    state.timerId = null;
+    state.timerRunning = false;
+  }
 
-  $('#startBtn').addEventListener('click', () => {
-    if (state.running) return;
-    state.running = true;
-    state.intervalId = setInterval(() => {
-      state.seconds -= 1;
-      if (state.seconds <= 0) {
-        state.seconds = 0;
-        clearInterval(state.intervalId);
-        state.running = false;
+  function startTimer(onDone) {
+    if (state.timerRunning) return;
+    state.timerRunning = true;
+    state.timerId = setInterval(() => {
+      state.timerSeconds -= 1;
+      updateTimerDisplay();
+      if (state.timerSeconds <= 0) {
+        state.timerSeconds = 0;
+        stopTimer();
         playBeep();
+        updateTimerDisplay();
+        if (onDone) onDone();
       }
-      renderTimer();
     }, 1000);
-  });
-  $('#pauseBtn').addEventListener('click', () => {
-    clearInterval(state.intervalId);
-    state.running = false;
-  });
-  $('#resetBtn').addEventListener('click', () => {
-    clearInterval(state.intervalId);
-    state.running = false;
-    state.seconds = state.minutes * 60;
-    renderTimer();
-  });
-
-  function renderTeamInputs() {
-    const el = $('#teamInputs');
-    el.innerHTML = state.teams.map((t, i) => `
-      <div class="card" style="margin-bottom:0;">
-        <input type="text" class="teamName" data-i="${i}" value="${escapeHtml(t.name)}" style="font-weight:800; margin-bottom:8px;" />
-        <textarea class="teamRaw" data-i="${i}" placeholder="찾은 개념을 쉼표(,) 또는 줄바꿈으로 구분해 입력">${escapeHtml(t.raw)}</textarea>
-      </div>
-    `).join('');
-    el.querySelectorAll('.teamName').forEach((input) => {
-      input.addEventListener('input', () => { state.teams[input.dataset.i].name = input.value; });
-    });
-    el.querySelectorAll('.teamRaw').forEach((ta) => {
-      ta.addEventListener('input', () => { state.teams[ta.dataset.i].raw = ta.value; });
-    });
   }
-  renderTeamInputs();
 
-  $('#applyTeamCountBtn').addEventListener('click', () => {
-    const n = Math.max(1, Math.min(10, Number($('#teamCountInput').value) || 4));
-    state.teamCount = n;
-    const prev = state.teams;
-    makeTeams(n);
-    for (let i = 0; i < Math.min(prev.length, n); i++) {
-      state.teams[i].name = prev[i].name;
-      state.teams[i].raw = prev[i].raw;
-    }
-    renderTeamInputs();
-  });
+  function updateTimerDisplay() {
+    const el = container.querySelector('#timerDisplay');
+    if (!el) return;
+    const m = Math.floor(state.timerSeconds / 60);
+    const s = state.timerSeconds % 60;
+    el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    el.style.color = state.timerSeconds <= 10 && state.timerSeconds > 0 ? '#dc2626' : '';
+  }
 
-  function renderResults() {
-    $('#resultCard').style.display = '';
-    const sorted = state.teams.slice().sort((a, b) => {
-      const scoreA = a.matched.size;
-      const scoreB = b.matched.size;
-      return scoreB - scoreA;
-    });
-
-    const rows = sorted.map((t, rank) => `
-      <tr>
-        <td>${rank + 1}</td>
-        <td>${escapeHtml(t.name)}</td>
-        <td><span class="badge good">${t.matched.size} / ${unit.concepts.length}</span></td>
-      </tr>
-    `).join('');
-
-    const ambiguousBlocks = state.teams
-      .filter((t) => t.ambiguous.some((a) => !a.accepted))
-      .map((t) => `
-        <div style="margin-top:10px;">
-          <strong>${escapeHtml(t.name)}</strong>의 애매한 답 (오타로 보임 — 인정할까요?)
-          <div class="candidate-list" style="margin-top:6px;">
-            ${t.ambiguous.map((a, ai) => `
-              <span class="candidate ${a.accepted ? 'selected' : ''}" data-team="${escapeHtml(t.name)}" data-ai="${ai}">
-                "${escapeHtml(a.token)}" → ${escapeHtml(a.concept)}로 인정
-              </span>
-            `).join('')}
+  // ---------- 1단계: 설정 ----------
+  function renderSetup() {
+    stopTimer();
+    renderShell(`
+      <div class="card">
+        <h2>설정</h2>
+        <div class="row">
+          <div>
+            <label for="teamCountInput">모둠 수</label>
+            <input type="number" id="teamCountInput" min="1" max="10" value="${state.teamCount}" style="width:90px;" />
+          </div>
+          <div>
+            <label for="searchMinInput">교과서 탐색 시간(분)</label>
+            <input type="number" id="searchMinInput" min="1" max="40" value="${state.searchMinutes}" style="width:90px;" />
+          </div>
+          <div>
+            <label for="submitMinInput">모둠별 입력 시간(분)</label>
+            <input type="number" id="submitMinInput" min="1" max="20" value="${state.submitMinutes}" style="width:90px;" />
           </div>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="applyCountBtn" type="button" class="ghost-btn">모둠 이름 새로고침</button>
+        </div>
+        <div id="teamNameArea" class="grid grid-4" style="margin-top:14px;"></div>
+        <div class="row" style="margin-top:20px;">
+          <button id="goSearchBtn" type="button" class="big-btn">▶ 설정 완료, 탐색 시간 시작하기</button>
+        </div>
+      </div>
+    `);
+
+    function renderTeamNameInputs() {
+      const el = container.querySelector('#teamNameArea');
+      el.innerHTML = state.teamNames.map((name, i) => `
+        <input type="text" class="teamNameInput" data-i="${i}" value="${escapeHtml(name)}" />
       `).join('');
+      el.querySelectorAll('.teamNameInput').forEach((input) => {
+        input.addEventListener('input', () => { state.teamNames[input.dataset.i] = input.value; });
+      });
+    }
+    renderTeamNameInputs();
 
-    $('#resultArea').innerHTML = `
-      <table class="leaderboard">
-        <thead><tr><th>순위</th><th>모둠</th><th>일치 개수</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      ${ambiguousBlocks ? `<div class="card" style="margin-top:16px;">${ambiguousBlocks}</div>` : ''}
-    `;
+    container.querySelector('#applyCountBtn').addEventListener('click', () => {
+      const n = Math.max(1, Math.min(10, Number(container.querySelector('#teamCountInput').value) || 4));
+      state.teamCount = n;
+      const prev = state.teamNames;
+      state.teamNames = Array.from({ length: n }, (_, i) => prev[i] || `${i + 1}모둠`);
+      renderTeamNameInputs();
+    });
 
-    $('#resultArea').querySelectorAll('.candidate').forEach((el) => {
-      el.addEventListener('click', () => {
-        const team = state.teams.find((t) => t.name === el.dataset.team);
-        const item = team.ambiguous[Number(el.dataset.ai)];
-        item.accepted = !item.accepted;
-        if (item.accepted) team.matched.add(item.concept);
-        else team.matched.delete(item.concept);
-        renderResults();
+    container.querySelector('#goSearchBtn').addEventListener('click', () => {
+      state.searchMinutes = Math.max(1, Math.min(40, Number(container.querySelector('#searchMinInput').value) || 10));
+      state.submitMinutes = Math.max(1, Math.min(20, Number(container.querySelector('#submitMinInput').value) || 5));
+      state.stage = 'search';
+      state.timerSeconds = state.searchMinutes * 60;
+      renderSearch();
+    });
+  }
+
+  // ---------- 2단계: 교과서 탐색 시간 ----------
+  function renderSearch() {
+    renderShell(`
+      <div class="card">
+        <h2>1단계 · 교과서에서 개념 찾기</h2>
+        <p class="hint">학생들이 교과서를 읽으며 핵심 개념을 찾는 시간이에요. 아직 입력은 하지 않아요.</p>
+        <div class="row" style="justify-content:center;">
+          <button id="startBtn" type="button">▶ 시작</button>
+          <button id="pauseBtn" type="button" class="ghost-btn">⏸ 일시정지</button>
+          <button id="resetBtn" type="button" class="ghost-btn">↺ 초기화</button>
+        </div>
+        <div class="timer-display" id="timerDisplay"></div>
+        <div class="row" style="justify-content:center; margin-top:10px;">
+          <button id="nextStageBtn" type="button" class="big-btn">다음 단계(모둠별 입력)로 →</button>
+        </div>
+      </div>
+    `);
+    updateTimerDisplay();
+
+    container.querySelector('#startBtn').addEventListener('click', () => startTimer());
+    container.querySelector('#pauseBtn').addEventListener('click', () => stopTimer());
+    container.querySelector('#resetBtn').addEventListener('click', () => {
+      stopTimer();
+      state.timerSeconds = state.searchMinutes * 60;
+      updateTimerDisplay();
+    });
+    container.querySelector('#nextStageBtn').addEventListener('click', () => {
+      state.stage = 'submit';
+      state.timerSeconds = state.submitMinutes * 60;
+      renderSubmit();
+    });
+  }
+
+  // ---------- 3단계: 모둠별 입력 시간 (학생 태블릿에서 진행) ----------
+  function renderSubmit() {
+    renderShell(`
+      <div class="card">
+        <h2>2단계 · 모둠별 입력 시간</h2>
+        <p class="hint">모둠 대표 학생이 아래 QR코드나 링크로 자기 모둠 화면을 열어 찾은 개념을 입력해요. 각자의 태블릿에서 바로 점수를 확인할 수 있어요.</p>
+        <div class="row" style="justify-content:center;">
+          <button id="startBtn" type="button">▶ 시작</button>
+          <button id="pauseBtn" type="button" class="ghost-btn">⏸ 일시정지</button>
+          <button id="resetBtn" type="button" class="ghost-btn">↺ 초기화</button>
+        </div>
+        <div class="timer-display" id="timerDisplay"></div>
+      </div>
+
+      <div id="teamLinkArea" class="grid grid-2"></div>
+
+      <div class="card">
+        <details>
+          <summary style="cursor:pointer; font-weight:700;">📋 정답 개념 전체 공개 (정리할 때 사용)</summary>
+          <div class="candidate-list" style="margin-top:10px;">
+            ${unit.concepts.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('')}
+          </div>
+        </details>
+      </div>
+
+      <div class="row no-print">
+        <a href="#" id="backToSetupLink" class="ghost-btn btn">← 설정 다시 하기</a>
+      </div>
+    `);
+    updateTimerDisplay();
+
+    container.querySelector('#startBtn').addEventListener('click', () => startTimer());
+    container.querySelector('#pauseBtn').addEventListener('click', () => stopTimer());
+    container.querySelector('#resetBtn').addEventListener('click', () => {
+      stopTimer();
+      state.timerSeconds = state.submitMinutes * 60;
+      updateTimerDisplay();
+    });
+    container.querySelector('#backToSetupLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      state.stage = 'setup';
+      renderSetup();
+    });
+
+    renderTeamLinks();
+  }
+
+  async function renderTeamLinks() {
+    const area = container.querySelector('#teamLinkArea');
+    area.innerHTML = state.teamNames.map((name, i) => `
+      <div class="card" style="margin-bottom:0; text-align:center;">
+        <h3>${escapeHtml(name)}</h3>
+        <div class="qr-holder" id="qr-${i}" style="margin:10px 0;">QR 만드는 중...</div>
+        <input type="text" class="link-input" id="link-${i}" readonly style="text-align:center; font-size:0.8em;" />
+        <div class="row" style="justify-content:center; margin-top:8px;">
+          <button type="button" class="ghost-btn copy-btn" data-i="${i}">🔗 링크 복사</button>
+          <a href="#" target="_blank" rel="noopener" id="open-${i}" class="ghost-btn btn">새 탭에서 열기</a>
+        </div>
+      </div>
+    `).join('');
+
+    for (let i = 0; i < state.teamNames.length; i++) {
+      const payload = encodeTeamPayload({ unitName: unit.name, teamName: state.teamNames[i], concepts: unit.concepts });
+      const link = buildTeamLink(payload);
+      const linkInput = container.querySelector(`#link-${i}`);
+      if (linkInput) linkInput.value = link;
+      const openLink = container.querySelector(`#open-${i}`);
+      if (openLink) openLink.href = link;
+
+      try {
+        const svg = await renderQrSvg(link);
+        const holder = container.querySelector(`#qr-${i}`);
+        if (holder) holder.innerHTML = svg;
+      } catch (e) {
+        const holder = container.querySelector(`#qr-${i}`);
+        if (holder) holder.textContent = 'QR코드를 만들지 못했어요. 링크를 복사해서 전달해 주세요.';
+      }
+    }
+
+    area.querySelectorAll('.copy-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const input = container.querySelector(`#link-${btn.dataset.i}`);
+        try {
+          await navigator.clipboard.writeText(input.value);
+          btn.textContent = '✅ 복사됨';
+          setTimeout(() => { btn.textContent = '🔗 링크 복사'; }, 1500);
+        } catch (e) {
+          input.select();
+          alert('자동 복사에 실패했어요. 선택된 링크를 직접 복사해 주세요.');
+        }
       });
     });
   }
 
-  $('#scoreBtn').addEventListener('click', () => {
-    for (const t of state.teams) {
-      const { matched, ambiguous } = scoreTeam(t.raw, unit.concepts);
-      t.matched = matched;
-      t.ambiguous = ambiguous;
-      t.scored = true;
-    }
-    renderResults();
-  });
-
-  renderTimer();
+  renderSetup();
 }

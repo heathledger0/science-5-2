@@ -5,6 +5,7 @@ import { renderMatch } from './views/match.js';
 import { renderBingo } from './views/bingo.js';
 import { renderChosung } from './views/chosung.js';
 import { renderKwl } from './views/kwl.js';
+import { renderTeamInput } from './views/teamInput.js';
 
 const app = document.getElementById('app');
 
@@ -22,6 +23,9 @@ function route() {
   }
   if (parts[0] === 'prepare') {
     return renderPrepare(app, { unitId: parts[1] || null });
+  }
+  if (parts[0] === 'team' && parts[1]) {
+    return renderTeamInput(app, { payload: parts[1] });
   }
   if (parts[0] === 'play' && parts[1]) {
     const unitId = parts[1];

@@ -22,8 +22,11 @@
    - 자동 추출은 100% 정확하지 않습니다. **최종적으로 어떤 개념을 정답으로 쓸지는 항상 교사가 클릭해서 선택**합니다.
      후보에 없는 개념은 직접 입력해서 추가할 수 있습니다.
 2. **활동 선택하기** — 확정된 핵심 개념으로 아래 4가지 활동 중 그날 쓸 것을 고릅니다.
-   - 🕵️ **개념 일치 확인 게임**: 기존에 하시던 방식의 개선판. 타이머로 탐색 시간을 재고, 모둠별로 찾은 개념을 입력하면
-     정답과 자동 비교해 모둠별 순위를 보여줍니다. 오타로 보이는 답은 교사가 인정 여부를 직접 결정합니다.
+   - 🕵️ **개념 일치 확인 게임**: 기존에 하시던 방식의 개선판. ① 모둠 수·탐색 시간·입력 시간을 설정하고
+     ② 교과서에서 개념을 찾는 시간을 타이머로 잰 뒤 ③ 모둠마다 생성되는 QR코드/링크를 모둠 태블릿으로 열어
+     학생이 직접 찾은 개념을 입력합니다. 채점은 그 자리에서 바로 되고, 정답과 다르지만 오타로 보이는 답은
+     입력한 학생이 인정할지 직접 고를 수 있습니다. 서버가 없어서 모둠별 점수가 교사 화면에 자동으로 모이지는
+     않고, 각 모둠이 자기 화면에서 결과를 확인합니다.
    - 🎯 **개념 빙고**: 핵심 개념(+ 헷갈리는 용어)으로 빙고판을 만들어 교과서에서 찾아 표시합니다. 학생마다 다른 배치의
      인쇄용 카드를 만들 수 있습니다.
    - 🔤 **초성 퀴즈**: 핵심 개념의 초성만 보고 맞히는 워밍업 게임.
@@ -68,26 +71,40 @@ GitHub Pages 같은 http(s) 환경에서 열어주세요.)
 ```
 index.html          앱 진입점
 style.css            전체 스타일 (인쇄 스타일 포함)
-js/app.js            해시 라우터 (#/, #/prepare, #/play/:id, #/play/:id/:mode)
+js/app.js            해시 라우터 (#/, #/prepare, #/play/:id, #/play/:id/:mode, #/team/:payload)
 js/store.js           localStorage 기반 저장소
 js/extract.js         핵심 개념 후보 자동 추출 (규칙 기반, AI 미사용)
 js/hangul.js           한글 초성 분해 유틸
 js/util.js             공통 유틸 (문자열 비교, 셔플, 효과음 등)
+js/teamScoring.js      모둠 입력 채점 로직 (match.js·teamInput.js가 공유)
+js/teamLink.js         모둠별 입력 링크(#/team/...) 인코딩·디코딩
+js/qr.js               QR코드 SVG 생성
 js/views/home.js        홈(단원 목록)
 js/views/prepare.js      단원 준비(핵심 개념 추출·확정)
 js/views/playSelect.js   활동 모드 선택
-js/views/match.js        개념 일치 확인 게임
+js/views/match.js        개념 일치 확인 게임 (설정 → 탐색 타이머 → 모둠별 입력 QR/링크)
+js/views/teamInput.js     모둠 태블릿에서 여는 입력·채점 화면
 js/views/bingo.js        개념 빙고
 js/views/chosung.js       초성 퀴즈
 js/views/kwl.js           KWL 차트
 js/fileExtract.js       업로드 파일(.txt/.pdf/.hwp/.hwpx)에서 텍스트 추출
 js/vendor/pdfjs/         PDF 텍스트 추출용 (Mozilla pdf.js, Apache-2.0)
 js/vendor/hwp-convert.browser.mjs   한글(HWP/HWPX) 텍스트 추출용 (hwp-convert, MIT)
+js/vendor/qrcode.mjs     QR코드 생성용 (qrcode-generator, MIT)
 ```
 
-`js/vendor/` 아래 라이브러리는 준비 화면에서 PDF나 한글 파일을 올릴 때만 필요한 시점에 불러옵니다(초기
-페이지 로딩을 무겁게 하지 않기 위함). 각 라이브러리의 라이선스 고지는 `js/vendor/hwp-convert.LICENSE.txt`,
-`js/vendor/hwp-convert.NOTICE.txt`에 있고, pdf.js는 파일 상단 주석에 Apache-2.0 고지가 포함되어 있습니다.
+`js/vendor/` 아래 라이브러리는 실제로 필요한 화면(파일 업로드, 모둠별 입력 QR 생성)에서만 동적으로
+불러옵니다(초기 페이지 로딩을 무겁게 하지 않기 위함). 각 라이브러리의 라이선스 고지는
+`js/vendor/hwp-convert.LICENSE.txt`, `js/vendor/hwp-convert.NOTICE.txt`에 있고, pdf.js와 qrcode.mjs는
+파일 상단 주석에 각각 Apache-2.0 · MIT 고지가 포함되어 있습니다.
+
+### 모둠별 입력 링크는 어떻게 동작하나요
+
+서버가 없기 때문에, "개념 일치 확인 게임"의 모둠별 입력 링크(`#/team/...`)는 채점에 필요한 정보(단원명·
+모둠명·정답 개념 목록)를 링크 자체(URL) 안에 담아 전달합니다. 학생 태블릿은 그 링크만 열면 되고 교사
+화면과 실시간으로 연결되지는 않습니다 — 각 모둠은 자기 화면에서 자기 점수만 바로 확인합니다. 정답
+목록이 링크에 그대로 담기기 때문에, 이 링크는 입력 시간에만 나눠주고 그 전에는 공유하지 않는 것이
+좋습니다.
 
 ## 앞으로 더할 수 있는 것
 
