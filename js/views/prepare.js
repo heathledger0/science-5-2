@@ -1,6 +1,7 @@
 import { getUnit, saveUnit, newUnit } from '../store.js';
 import { extractCandidates } from '../extract.js';
 import { escapeHtml } from '../util.js';
+import { extractTextFromFile } from '../fileExtract.js';
 
 export function renderPrepare(container, { unitId }) {
   const existing = unitId ? getUnit(unitId) : null;
@@ -24,12 +25,12 @@ export function renderPrepare(container, { unitId }) {
       <label for="unitText">① 단원 내용 붙여넣기 (교과서 본문, 목차, 요약 등)</label>
       <textarea id="unitText" placeholder="교과서 내용을 여기에 붙여넣으세요...">${escapeHtml(draft.sourceExcerpt)}</textarea>
       <div class="row" style="margin-top:10px;">
-        <button id="uploadBtn" type="button" class="ghost-btn">📄 .txt 파일 올리기</button>
-        <input type="file" id="uploadInput" accept=".txt,text/plain" style="display:none" />
+        <button id="uploadBtn" type="button" class="ghost-btn">📄 파일 올리기 (.txt, .pdf, .hwp, .hwpx)</button>
+        <input type="file" id="uploadInput" accept=".txt,.pdf,.hwp,.hwpx,text/plain,application/pdf" style="display:none" />
         <span class="spacer"></span>
         <button id="extractBtn" type="button">🔍 핵심 개념 후보 찾기</button>
       </div>
-      <p class="hint">PDF나 워드 파일은 내용을 복사해서 붙여넣어 주세요. 인터넷 연결 없이도, 외부 서버로 전송하지 않고 이 화면 안에서만 처리돼요.</p>
+      <p class="hint" id="uploadHint">모든 처리는 이 화면 안에서만 일어나고 외부 서버로 전송되지 않아요. PDF는 스캔 이미지가 아닌, 글자가 그대로 있는 파일이어야 인식돼요. 한글(HWP) 파일은 완벽하지 않을 수 있으니, 추출된 내용이 이상하면 복사해서 붙여넣기로 다시 시도해 주세요.</p>
     </div>
 
     <div class="card" id="candidateCard" style="display:none;">
@@ -138,8 +139,19 @@ export function renderPrepare(container, { unitId }) {
   $('#uploadInput').addEventListener('change', async () => {
     const file = $('#uploadInput').files[0];
     if (!file) return;
-    textArea.value = await file.text();
-    $('#uploadInput').value = '';
+    const uploadBtn = $('#uploadBtn');
+    const originalLabel = uploadBtn.textContent;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = '⏳ 파일에서 글자를 뽑는 중...';
+    try {
+      textArea.value = await extractTextFromFile(file);
+    } catch (e) {
+      alert(e.message || '파일을 읽지 못했어요.');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = originalLabel;
+      $('#uploadInput').value = '';
+    }
   });
 
   $('#extractBtn').addEventListener('click', () => {
