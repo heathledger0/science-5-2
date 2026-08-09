@@ -18,7 +18,7 @@ export function renderPrepare(container, { unitId }) {
 
     <div class="card">
       <label for="unitName">단원 이름</label>
-      <input type="text" id="unitName" placeholder="예: 5-2-2. 날씨와 우리 생활" value="${escapeHtml(draft.name)}" />
+      <input type="text" id="unitName" placeholder="예: 화산과 지진" value="${escapeHtml(draft.name)}" />
     </div>
 
     <div class="card">
