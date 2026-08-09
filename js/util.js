@@ -42,6 +42,17 @@ export function stripParticle(token) {
   return token;
 }
 
+// stripParticle과 달리 "너무 짧아져서 안 자른" 경우까지 조사가 붙은 것으로
+// 판정한다 (예: "것을" → stripParticle은 안전을 위해 그대로 두지만, 이 함수는
+// 조사가 붙어 있다는 사실 자체는 true로 알려준다). 복합어 후보를 판단할 때
+// "이 어절이 다른 구의 일부인지" 가늠하는 용도로 쓴다.
+export function endsWithParticle(token) {
+  for (const suf of PARTICLE_SUFFIXES) {
+    if (token.length > suf.length && token.endsWith(suf)) return true;
+  }
+  return false;
+}
+
 export function shuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
