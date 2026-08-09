@@ -2,6 +2,14 @@ import { decodeTeamPayload } from '../teamLink.js';
 import { escapeHtml } from '../util.js';
 import { scoreTeam } from '../teamScoring.js';
 
+// 이 기기(브라우저 탭)에서 실수로 새로고침해도 입력 중이던 내용이 사라지지
+// 않도록 임시 저장한다. sessionStorage라 탭을 완전히 닫으면 사라지므로,
+// QR을 다음 수업 때 다시 열어도 지난 답이 남아 있지는 않는다. 다른 기기와는
+// 애초에 공유되지 않는다(서버가 없음).
+function draftKey(payload) {
+  return `scienceIntroApp_teamDraft_${payload}`;
+}
+
 export function renderTeamInput(container, { payload }) {
   let data;
   try {
@@ -15,6 +23,7 @@ export function renderTeamInput(container, { payload }) {
   }
 
   const { unitName, teamName, concepts } = data;
+  const storageKey = draftKey(payload);
   let result = null;
 
   container.innerHTML = `
@@ -26,7 +35,9 @@ export function renderTeamInput(container, { payload }) {
       <textarea id="raw" placeholder="예: 태양 고도, 남중 고도, 그림자 길이"></textarea>
       <div class="row" style="margin-top:10px;">
         <button id="scoreBtn" type="button" class="big-btn">✅ 채점하기</button>
+        <button id="clearBtn" type="button" class="ghost-btn">🗑 지우고 새로 시작하기</button>
       </div>
+      <p class="hint">이 화면에 입력한 내용은 이 기기에만, 새로고침해도 지워지지 않도록 임시 저장돼요.</p>
     </div>
 
     <div id="resultCard" class="card" style="display:none;"></div>
@@ -74,8 +85,40 @@ export function renderTeamInput(container, { payload }) {
     });
   }
 
+  function saveDraft() {
+    try {
+      sessionStorage.setItem(storageKey, $('#raw').value);
+    } catch (e) { /* 저장 실패는 조용히 무시 (임시 저장은 편의 기능일 뿐) */ }
+  }
+
+  let saveTimer = null;
+  $('#raw').addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveDraft, 300);
+  });
+
   $('#scoreBtn').addEventListener('click', () => {
+    saveDraft();
     result = scoreTeam($('#raw').value, concepts);
     renderResult();
   });
+
+  $('#clearBtn').addEventListener('click', () => {
+    if (!confirm('입력한 내용을 지우고 새로 시작할까요?')) return;
+    $('#raw').value = '';
+    try { sessionStorage.removeItem(storageKey); } catch (e) { /* 무시 */ }
+    result = null;
+    $('#resultCard').style.display = 'none';
+    $('#resultCard').innerHTML = '';
+  });
+
+  // 이전에 저장해 둔 내용이 있으면 불러와서 이어서 볼 수 있게 한다.
+  try {
+    const draft = sessionStorage.getItem(storageKey);
+    if (draft) {
+      $('#raw').value = draft;
+      result = scoreTeam(draft, concepts);
+      renderResult();
+    }
+  } catch (e) { /* 저장소를 못 읽어도 그냥 빈 화면으로 시작 */ }
 }
