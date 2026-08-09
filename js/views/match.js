@@ -24,10 +24,37 @@ export function renderMatch(container, { unitId }) {
   function renderShell(bodyHtml) {
     container.innerHTML = `
       <a href="#/play/${unit.id}" class="ghost-btn btn no-print">← 활동 선택으로</a>
-      <h1 style="margin-top:14px;">🕵️ 개념 일치 확인 게임</h1>
-      <p class="lead">${escapeHtml(unit.name)} · 정답 개념 ${unit.concepts.length}개</p>
+      <h1 style="margin-top:14px;" class="no-print">🕵️ 개념 일치 확인 게임</h1>
+      <p class="lead no-print">${escapeHtml(unit.name)} · 정답 개념 ${unit.concepts.length}개</p>
       ${bodyHtml}
+      <div id="printArea" class="print-sheet"></div>
     `;
+  }
+
+  // 모둠별 QR/링크는 (단원명, 모둠 이름, 정답 개념)이 바뀌지 않는 한 항상 같은
+  // 값으로 만들어진다 — 그래서 미리 인쇄해서 게시판에 붙여 두고 계속 재사용할
+  // 수 있다. 정답 개념을 수정하거나 모둠 이름을 바꾸면 QR도 함께 바뀐다.
+  async function printTeamCards(teamNames) {
+    const printArea = container.querySelector('#printArea');
+    printArea.innerHTML = '<p>QR코드를 만드는 중...</p>';
+    const cards = await Promise.all(teamNames.map(async (name, i) => {
+      const payload = encodeTeamPayload({ unitName: unit.name, teamName: name, concepts: unit.concepts });
+      const link = buildTeamLink(payload);
+      let svg = '<p>QR코드를 만들지 못했어요. 아래 주소를 직접 입력해 주세요.</p>';
+      try {
+        svg = await renderQrSvg(link, { cellSize: 6, margin: 2 });
+      } catch (e) { /* svg 대체 문구 사용 */ }
+      return `
+        <div class="card" style="text-align:center; page-break-after: ${i < teamNames.length - 1 ? 'always' : 'auto'};">
+          <p class="hint">${escapeHtml(unit.name)}</p>
+          <h1>${escapeHtml(name)}</h1>
+          <div>${svg}</div>
+          <p class="hint">스캔이 안 되면 이 주소를 입력하세요:<br>${escapeHtml(link)}</p>
+        </div>
+      `;
+    }));
+    printArea.innerHTML = cards.join('');
+    window.print();
   }
 
   function stopTimer() {
@@ -65,7 +92,7 @@ export function renderMatch(container, { unitId }) {
   function renderSetup() {
     stopTimer();
     renderShell(`
-      <div class="card">
+      <div class="card no-print">
         <h2>설정</h2>
         <div class="row">
           <div>
@@ -87,7 +114,9 @@ export function renderMatch(container, { unitId }) {
         <div id="teamNameArea" class="grid grid-4" style="margin-top:14px;"></div>
         <div class="row" style="margin-top:20px;">
           <button id="goSearchBtn" type="button" class="big-btn">▶ 설정 완료, 탐색 시간 시작하기</button>
+          <button id="printQrBtn" type="button" class="ghost-btn">🖨 모둠 QR 미리 인쇄하기</button>
         </div>
+        <p class="hint">QR은 단원의 정답 개념·모둠 이름이 그대로면 항상 같게 만들어져요. 미리 인쇄해서 게시판에 붙여 두고 계속 재사용할 수 있어요.</p>
       </div>
     `);
 
@@ -117,12 +146,21 @@ export function renderMatch(container, { unitId }) {
       state.timerSeconds = state.searchMinutes * 60;
       renderSearch();
     });
+
+    container.querySelector('#printQrBtn').addEventListener('click', async () => {
+      const btn = container.querySelector('#printQrBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ QR 만드는 중...';
+      await printTeamCards(state.teamNames);
+      btn.disabled = false;
+      btn.textContent = '🖨 모둠 QR 미리 인쇄하기';
+    });
   }
 
   // ---------- 2단계: 교과서 탐색 시간 ----------
   function renderSearch() {
     renderShell(`
-      <div class="card">
+      <div class="card no-print">
         <h2>1단계 · 교과서에서 개념 찾기</h2>
         <p class="hint">학생들이 교과서를 읽으며 핵심 개념을 찾는 시간이에요. 아직 입력은 하지 않아요.</p>
         <div class="row" style="justify-content:center;">
@@ -155,7 +193,7 @@ export function renderMatch(container, { unitId }) {
   // ---------- 3단계: 모둠별 입력 시간 (학생 태블릿에서 진행) ----------
   function renderSubmit() {
     renderShell(`
-      <div class="card">
+      <div class="card no-print">
         <h2>2단계 · 모둠별 입력 시간</h2>
         <p class="hint">모둠 대표 학생이 아래 QR코드나 링크로 자기 모둠 화면을 열어 찾은 개념을 입력해요. 각자의 태블릿에서 바로 점수를 확인할 수 있어요.</p>
         <div class="row" style="justify-content:center;">
@@ -166,9 +204,13 @@ export function renderMatch(container, { unitId }) {
         <div class="timer-display" id="timerDisplay"></div>
       </div>
 
-      <div id="teamLinkArea" class="grid grid-2"></div>
+      <div class="row no-print" style="margin-bottom:14px;">
+        <button id="printQrBtn2" type="button" class="ghost-btn">🖨 모둠 QR 다시 인쇄하기</button>
+      </div>
 
-      <div class="card">
+      <div id="teamLinkArea" class="grid grid-2 no-print"></div>
+
+      <div class="card no-print">
         <details>
           <summary style="cursor:pointer; font-weight:700;">📋 정답 개념 전체 공개 (정리할 때 사용)</summary>
           <div class="candidate-list" style="margin-top:10px;">
@@ -194,6 +236,14 @@ export function renderMatch(container, { unitId }) {
       e.preventDefault();
       state.stage = 'setup';
       renderSetup();
+    });
+    container.querySelector('#printQrBtn2').addEventListener('click', async () => {
+      const btn = container.querySelector('#printQrBtn2');
+      btn.disabled = true;
+      btn.textContent = '⏳ QR 만드는 중...';
+      await printTeamCards(state.teamNames);
+      btn.disabled = false;
+      btn.textContent = '🖨 모둠 QR 다시 인쇄하기';
     });
 
     renderTeamLinks();
