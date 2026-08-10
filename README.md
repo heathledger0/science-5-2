@@ -71,13 +71,13 @@ GitHub Pages 같은 http(s) 환경에서 열어주세요.)
 ```
 index.html          앱 진입점
 style.css            전체 스타일 (인쇄 스타일 포함)
-js/app.js            해시 라우터 (#/, #/prepare, #/play/:id, #/play/:id/:mode, #/team/:payload)
+js/app.js            해시 라우터 (#/, #/prepare, #/play/:id, #/play/:id/:mode) + 모둠 입력 링크(?team=:payload)
 js/store.js           localStorage 기반 저장소
 js/extract.js         핵심 개념 후보 자동 추출 (규칙 기반, AI 미사용)
 js/hangul.js           한글 초성 분해 유틸
 js/util.js             공통 유틸 (문자열 비교, 셔플, 효과음 등)
 js/teamScoring.js      모둠 입력 채점 로직 (match.js·teamInput.js가 공유)
-js/teamLink.js         모둠별 입력 링크(#/team/...) 인코딩·디코딩
+js/teamLink.js         모둠별 입력 링크(?team=...) 인코딩·디코딩
 js/qr.js               QR코드 SVG 생성
 js/views/home.js        홈(단원 목록)
 js/views/prepare.js      단원 준비(핵심 개념 추출·확정)
@@ -100,7 +100,7 @@ js/vendor/qrcode.mjs     QR코드 생성용 (qrcode-generator, MIT)
 
 ### 모둠별 입력 링크는 어떻게 동작하나요
 
-서버가 없기 때문에, "개념 일치 확인 게임"의 모둠별 입력 링크(`#/team/...`)는 채점에 필요한 정보(단원명·
+서버가 없기 때문에, "개념 일치 확인 게임"의 모둠별 입력 링크(`?team=...`)는 채점에 필요한 정보(단원명·
 모둠명·정답 개념 목록)를 링크 자체(URL) 안에 담아 전달합니다. 학생 태블릿은 그 링크만 열면 되고 교사
 화면과 실시간으로 연결되지는 않습니다 — 각 모둠은 자기 화면에서 자기 점수만 바로 확인합니다. 정답
 목록이 링크에 그대로 담기기 때문에, 이 링크는 입력 시간에만 나눠주고 그 전에는 공유하지 않는 것이

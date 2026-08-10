@@ -15,6 +15,15 @@ function parseHash() {
 }
 
 function route() {
+  // 모둠별 입력 링크(QR)는 ?team=... 형식의 쿼리스트링을 우선 확인한다.
+  // 일부 카메라 앱/인앱 브라우저가 "#" 뒤의 긴 해시를 링크로 제대로 인식하지
+  // 못해 스캔 후 페이지가 안 열리는 경우가 있어, 쿼리스트링 쪽이 더 안전하다.
+  const teamParam = new URLSearchParams(location.search).get('team');
+  if (teamParam) {
+    app.innerHTML = '';
+    return renderTeamInput(app, { payload: teamParam });
+  }
+
   const parts = parseHash();
   app.innerHTML = '';
 

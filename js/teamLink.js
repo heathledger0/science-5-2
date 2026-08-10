@@ -33,5 +33,9 @@ export function decodeTeamPayload(payload) {
 }
 
 export function buildTeamLink(payload) {
-  return `${location.origin}${location.pathname}#/team/${payload}`;
+  // "#/team/..." 대신 "?team=..." 형식을 쓴다. 일부 카메라 앱/QR 스캐너,
+  // 인앱 브라우저가 "#" 뒤의 긴 문자열을 링크의 일부로 제대로 인식하지 못해
+  // 스캔은 되는데 페이지가 안 열리는 경우가 있었다. 쿼리스트링은 그런 문제가
+  // 훨씬 적다.
+  return `${location.origin}${location.pathname}?team=${payload}`;
 }
