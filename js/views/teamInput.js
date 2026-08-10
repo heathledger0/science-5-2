@@ -34,7 +34,7 @@ export function renderTeamInput(container, { payload }) {
       <label for="raw">찾은 개념 (쉼표 또는 줄바꿈으로 구분)</label>
       <textarea id="raw" placeholder="예: 태양 고도, 남중 고도, 그림자 길이"></textarea>
       <div class="row" style="margin-top:10px;">
-        <button id="scoreBtn" type="button" class="big-btn">✅ 채점하기</button>
+        <button id="scoreBtn" type="button" class="big-btn" disabled>✅ 다 찾았으면 채점하기</button>
         <button id="clearBtn" type="button" class="ghost-btn">🗑 지우고 새로 시작하기</button>
       </div>
       <p class="hint">이 화면에 입력한 내용은 이 기기에만, 새로고침해도 지워지지 않도록 임시 저장돼요.</p>
@@ -91,13 +91,21 @@ export function renderTeamInput(container, { payload }) {
     } catch (e) { /* 저장 실패는 조용히 무시 (임시 저장은 편의 기능일 뿐) */ }
   }
 
+  // 아직 아무것도 안 적었는데 성급하게 채점 버튼부터 누르는 경우가 많아서,
+  // 뭔가 입력하기 전에는 버튼을 눌러도 반응하지 않게 막아둔다.
+  function updateScoreBtnState() {
+    $('#scoreBtn').disabled = $('#raw').value.trim().length === 0;
+  }
+
   let saveTimer = null;
   $('#raw').addEventListener('input', () => {
+    updateScoreBtnState();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveDraft, 300);
   });
 
   $('#scoreBtn').addEventListener('click', () => {
+    if (!confirm('정말 다 찾았나요? 채점하면 바로 점수가 나와요.')) return;
     saveDraft();
     result = scoreTeam($('#raw').value, concepts);
     renderResult();
@@ -110,6 +118,7 @@ export function renderTeamInput(container, { payload }) {
     result = null;
     $('#resultCard').style.display = 'none';
     $('#resultCard').innerHTML = '';
+    updateScoreBtnState();
   });
 
   // 이전에 저장해 둔 내용이 있으면 불러와서 이어서 볼 수 있게 한다.
@@ -121,4 +130,6 @@ export function renderTeamInput(container, { payload }) {
       renderResult();
     }
   } catch (e) { /* 저장소를 못 읽어도 그냥 빈 화면으로 시작 */ }
+
+  updateScoreBtnState();
 }

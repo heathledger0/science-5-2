@@ -12,12 +12,28 @@ export function scoreTeam(rawText, concepts) {
   for (const token of tokens) {
     const norm = normalizeForCompare(token);
     if (!norm) continue;
+
     const exact = concepts.find((c) => normalizeForCompare(c) === norm && !used.has(c));
     if (exact) {
       matched.add(exact);
       used.add(exact);
       continue;
     }
+
+    // "남중 고도" 정답에 "태양의 남중 고도"처럼 앞뒤로 말을 덧붙여 쓴 경우도
+    // 정답으로 인정한다. 편집 거리로는 너무 멀어서(글자 여러 개 차이) 아래
+    // 오타 허용 로직에 안 걸리기 때문에 별도로 처리한다.
+    const contained = concepts.find((c) => {
+      if (used.has(c)) return false;
+      const cn = normalizeForCompare(c);
+      return cn.length >= 2 && (norm.includes(cn) || cn.includes(norm));
+    });
+    if (contained) {
+      matched.add(contained);
+      used.add(contained);
+      continue;
+    }
+
     let best = null;
     let bestDist = Infinity;
     for (const c of concepts) {
