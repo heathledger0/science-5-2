@@ -11,9 +11,12 @@
 
 ## 사용 흐름
 
-1. **단원 준비하기** — 교과서 본문(또는 목차, 요약)을 붙여넣거나 `.txt` / `.pdf` / `.hwp` / `.hwpx` 파일을 올립니다.
-   업로드하면 브라우저 안에서 바로 텍스트를 뽑아 입력창에 채워줍니다(외부 서버로 전송되지 않음).
-   - PDF는 스캔한 이미지가 아니라 글자 정보가 있는 파일이어야 인식돼요.
+1. **단원 준비하기** — 교과서 본문(또는 목차, 요약)을 붙여넣거나 `.txt` / `.pdf` / `.hwp` / `.hwpx` / 사진(`.jpg`,
+   `.png`) 파일을 올립니다. 업로드하면 브라우저 안에서 바로 텍스트를 뽑아 입력창에 채워줍니다(외부 서버로
+   전송되지 않음).
+   - 글자 정보가 있는 PDF는 바로 인식되고, 스캔 이미지로 만든 PDF나 사진·캡처본은 글자 인식(OCR)으로
+     읽습니다. 처음 한 번만 한국어 인식 데이터를 내려받느라 시간이 조금 걸리고, 그다음부터는 빨라져요.
+     화질이 좋고 글자가 또렷할수록 정확해요.
    - 한글(HWP/HWPX) 파일은 별도 오픈소스 라이브러리로 처리하는데, 100% 완벽하지는 않을 수 있어요.
      추출된 내용이 이상하면 원본에서 복사해서 붙여넣는 방식으로 바꿔서 시도해 주세요.
    "핵심 개념 후보 찾기"를 누르면 두 가지 방식으로 후보를 제안합니다.
@@ -95,12 +98,13 @@ js/fileExtract.js       업로드 파일(.txt/.pdf/.hwp/.hwpx)에서 텍스트 �
 js/vendor/pdfjs/         PDF 텍스트 추출용 (Mozilla pdf.js, Apache-2.0)
 js/vendor/hwp-convert.browser.mjs   한글(HWP/HWPX) 텍스트 추출용 (hwp-convert, MIT)
 js/vendor/qrcode.mjs     QR코드 생성용 (qrcode-generator, MIT)
+js/vendor/tesseract/     사진·스캔 PDF 글자 인식(OCR)용 (Tesseract.js + 한국어 언어 데이터, Apache-2.0)
 ```
 
 `js/vendor/` 아래 라이브러리는 실제로 필요한 화면(파일 업로드, 모둠별 입력 QR 생성)에서만 동적으로
 불러옵니다(초기 페이지 로딩을 무겁게 하지 않기 위함). 각 라이브러리의 라이선스 고지는
-`js/vendor/hwp-convert.LICENSE.txt`, `js/vendor/hwp-convert.NOTICE.txt`에 있고, pdf.js와 qrcode.mjs는
-파일 상단 주석에 각각 Apache-2.0 · MIT 고지가 포함되어 있습니다.
+`js/vendor/hwp-convert.LICENSE.txt`, `js/vendor/hwp-convert.NOTICE.txt`, `js/vendor/tesseract/*.LICENSE.txt`에
+있고, pdf.js와 qrcode.mjs는 파일 상단 주석에 각각 Apache-2.0 · MIT 고지가 포함되어 있습니다.
 
 ### 모둠별 입력 링크는 어떻게 동작하나요
 

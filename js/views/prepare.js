@@ -25,12 +25,12 @@ export function renderPrepare(container, { unitId }) {
       <label for="unitText">① 단원 내용 붙여넣기 (교과서 본문, 목차, 요약 등)</label>
       <textarea id="unitText" placeholder="교과서 내용을 여기에 붙여넣으세요...">${escapeHtml(draft.sourceExcerpt)}</textarea>
       <div class="row" style="margin-top:10px;">
-        <button id="uploadBtn" type="button" class="ghost-btn">📄 파일 올리기 (.txt, .pdf, .hwp, .hwpx)</button>
-        <input type="file" id="uploadInput" accept=".txt,.pdf,.hwp,.hwpx,text/plain,application/pdf" style="display:none" />
+        <button id="uploadBtn" type="button" class="ghost-btn">📄 파일/사진 올리기 (.txt, .pdf, .hwp, .hwpx, .jpg, .png)</button>
+        <input type="file" id="uploadInput" accept=".txt,.pdf,.hwp,.hwpx,.jpg,.jpeg,.png,text/plain,application/pdf,image/*" style="display:none" />
         <span class="spacer"></span>
         <button id="extractBtn" type="button">🔍 핵심 개념 후보 찾기</button>
       </div>
-      <p class="hint" id="uploadHint">모든 처리는 이 화면 안에서만 일어나고 외부 서버로 전송되지 않아요. PDF는 스캔 이미지가 아닌, 글자가 그대로 있는 파일이어야 인식돼요. 한글(HWP) 파일은 완벽하지 않을 수 있으니, 추출된 내용이 이상하면 복사해서 붙여넣기로 다시 시도해 주세요.</p>
+      <p class="hint" id="uploadHint">모든 처리는 이 화면 안에서만 일어나고 외부 서버로 전송되지 않아요. 교과서를 찍은 사진이나 캡처본도 올릴 수 있어요(글자 인식은 처음 한 번만 준비 시간이 조금 걸리고, 화질이 좋을수록 정확해요). 스캔 이미지로 만든 PDF도 같은 방식으로 글자를 읽어요. 한글(HWP) 파일은 완벽하지 않을 수 있으니, 추출된 내용이 이상하면 복사해서 붙여넣기로 다시 시도해 주세요.</p>
     </div>
 
     <div class="card" id="candidateCard" style="display:none;">
@@ -144,7 +144,9 @@ export function renderPrepare(container, { unitId }) {
     uploadBtn.disabled = true;
     uploadBtn.textContent = '⏳ 파일에서 글자를 뽑는 중...';
     try {
-      textArea.value = await extractTextFromFile(file);
+      textArea.value = await extractTextFromFile(file, ({ message }) => {
+        if (message) uploadBtn.textContent = `⏳ ${message}`;
+      });
     } catch (e) {
       alert(e.message || '파일을 읽지 못했어요.');
     } finally {
