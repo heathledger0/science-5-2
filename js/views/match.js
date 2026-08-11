@@ -68,6 +68,8 @@ export function renderMatch(container, { unitId }) {
     state.timerRunning = true;
     state.timerId = setInterval(() => {
       state.timerSeconds -= 1;
+      if (state.timerSeconds === 60) playBeep(); // 1분 남았을 때 한 번
+      if (state.timerSeconds <= 15 && state.timerSeconds > 0) playBeep(); // 15초부터 매초
       updateTimerDisplay();
       if (state.timerSeconds <= 0) {
         state.timerSeconds = 0;
@@ -85,7 +87,7 @@ export function renderMatch(container, { unitId }) {
     const m = Math.floor(state.timerSeconds / 60);
     const s = state.timerSeconds % 60;
     el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    el.style.color = state.timerSeconds <= 10 && state.timerSeconds > 0 ? '#dc2626' : '';
+    el.classList.toggle('timer-urgent', state.timerSeconds <= 15 && state.timerSeconds > 0);
   }
 
   // ---------- 1단계: 설정 ----------
