@@ -1,6 +1,7 @@
 import { getUnits, getUnit, deleteUnit, saveUnit, newUnit } from '../store.js';
 import { escapeHtml } from '../util.js';
 import { EXAMPLE_UNIT_ID, buildExampleUnit } from '../exampleUnit.js';
+import { formatUnitAsText, parseUnitTextFile } from '../unitTextFile.js';
 
 function formatDate(ts) {
   const d = new Date(ts);
@@ -18,7 +19,7 @@ export function renderHome(container) {
       <a href="#/prepare" class="btn big-btn">＋ 새 단원 준비하기</a>
       <button id="exampleBtn" class="ghost-btn">🔎 예시로 살펴보기 (6-2-1. 계절의 변화)</button>
       <button id="importBtn" class="ghost-btn">📥 파일로 불러오기</button>
-      <input type="file" id="importInput" accept="application/json" style="display:none" />
+      <input type="file" id="importInput" accept=".txt,text/plain" style="display:none" />
     </div>
 
     <div id="unitList" class="grid grid-2"></div>
@@ -61,17 +62,10 @@ export function renderHome(container) {
   listEl.querySelectorAll('.export-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const unit = units.find((u) => u.id === btn.dataset.id);
-      const data = {
-        name: unit.name,
-        concepts: unit.concepts,
-        distractors: unit.distractors,
-        sourceExcerpt: unit.sourceExcerpt,
-        exportedFrom: '단원 열기',
-      };
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const blob = new Blob([formatUnitAsText(unit)], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${(unit.name || 'unit').replace(/[\\/:*?"<>|]/g, '_')}.json`;
+      a.download = `${(unit.name || 'unit').replace(/[\\/:*?"<>|]/g, '_')}.txt`;
       a.click();
       URL.revokeObjectURL(a.href);
     });
@@ -84,15 +78,12 @@ export function renderHome(container) {
     if (!file) return;
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data || !Array.isArray(data.concepts)) {
-        throw new Error('올바른 단원 파일이 아니에요.');
-      }
+      const data = parseUnitTextFile(text);
       const unit = newUnit({
-        name: typeof data.name === 'string' ? data.name : '(불러온 단원)',
-        concepts: data.concepts.filter((c) => typeof c === 'string'),
-        distractors: Array.isArray(data.distractors) ? data.distractors.filter((c) => typeof c === 'string') : [],
-        sourceExcerpt: typeof data.sourceExcerpt === 'string' ? data.sourceExcerpt : '',
+        name: data.name || '(불러온 단원)',
+        concepts: data.concepts,
+        distractors: data.distractors,
+        sourceExcerpt: data.sourceExcerpt,
       });
       saveUnit(unit);
       location.hash = `#/prepare/${unit.id}`;
